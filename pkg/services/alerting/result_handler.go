@@ -2,6 +2,7 @@ package alerting
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/grafana/grafana/pkg/bus"
@@ -9,7 +10,6 @@ import (
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/infra/metrics"
 	"github.com/grafana/grafana/pkg/models"
-	"golang.org/x/xerrors"
 
 	"github.com/grafana/grafana/pkg/services/annotations"
 	"github.com/grafana/grafana/pkg/services/rendering"
@@ -59,12 +59,12 @@ func (handler *defaultResultHandler) handle(evalContext *EvalContext) error {
 		}
 
 		if err := bus.Dispatch(cmd); err != nil {
-			if err == models.ErrCannotChangeStateOnPausedAlert {
+			if errors.Is(err, models.ErrCannotChangeStateOnPausedAlert) {
 				handler.log.Error("Cannot change state on alert that's paused", "error", err)
 				return err
 			}
 
-			if err == models.ErrRequiresNewState {
+			if errors.Is(err, models.ErrRequiresNewState) {
 				handler.log.Info("Alert already updated")
 				return nil
 			}
@@ -100,11 +100,12 @@ func (handler *defaultResultHandler) handle(evalContext *EvalContext) error {
 	}
 
 	if err := handler.notifier.SendIfNeeded(evalContext); err != nil {
-		if xerrors.Is(err, context.Canceled) {
+		switch {
+		case errors.Is(err, context.Canceled):
 			handler.log.Debug("handler.notifier.SendIfNeeded returned context.Canceled")
-		} else if xerrors.Is(err, context.DeadlineExceeded) {
+		case errors.Is(err, context.DeadlineExceeded):
 			handler.log.Debug("handler.notifier.SendIfNeeded returned context.DeadlineExceeded")
-		} else {
+		default:
 			handler.log.Error("handler.notifier.SendIfNeeded failed", "err", err)
 		}
 	}

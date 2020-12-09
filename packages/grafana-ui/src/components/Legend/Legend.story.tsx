@@ -1,5 +1,6 @@
 import React from 'react';
-import { LegendList, LegendPlacement, LegendItem, LegendTable, generateLegendItems } from './Legend';
+import { generateLegendItems } from './Legend';
+import { LegendList, LegendPlacement, LegendItem, LegendTable } from '@grafana/ui';
 import { number, select, text } from '@storybook/addon-knobs';
 import { action } from '@storybook/addon-actions';
 import { GraphLegendListItem, GraphLegendTableRow, GraphLegendItemProps } from '../Graph/GraphLegendItem';
@@ -18,11 +19,12 @@ const getStoriesKnobs = (table = false) => {
 
   const rawRenderer = (item: LegendItem) => (
     <>
-      Label: <strong>{item.label}</strong>, Color: <strong>{item.color}</strong>, isVisible:{' '}
-      <strong>{item.isVisible ? 'yes' : 'no'}</strong>
+      Label: <strong>{item.label}</strong>, Color: <strong>{item.color}</strong>, disabled:{' '}
+      <strong>{item.disabled ? 'yes' : 'no'}</strong>
     </>
   );
 
+  // eslint-disable-next-line react/display-name
   const customRenderer = (component: React.ComponentType<GraphLegendItemProps>) => (item: LegendItem) =>
     React.createElement(component, {
       item,
@@ -52,10 +54,10 @@ const getStoriesKnobs = (table = false) => {
   const legendPlacement = select<LegendPlacement>(
     'Legend placement',
     {
-      under: 'under',
+      bottom: 'bottom',
       right: 'right',
     },
-    'under'
+    'bottom'
   );
 
   return {

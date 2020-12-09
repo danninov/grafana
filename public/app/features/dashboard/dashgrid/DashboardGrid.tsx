@@ -14,8 +14,8 @@ import { DashboardRow } from '../components/DashboardRow';
 import { GRID_CELL_HEIGHT, GRID_CELL_VMARGIN, GRID_COLUMN_COUNT } from 'app/core/constants';
 import { DashboardPanel } from './DashboardPanel';
 import { DashboardModel, PanelModel } from '../state';
-import { CoreEvents } from 'app/types';
-import { panelAdded, panelRemoved } from '../state/PanelModel';
+import { Subscription } from 'rxjs';
+import { DashboardPanelsChangedEvent } from 'app/types/events';
 
 let lastGridWidth = 1200;
 let ignoreNextWidthChange = false;
@@ -64,8 +64,9 @@ function GridWrapper({
   /*
     Disable draggable if mobile device, solving an issue with unintentionally
      moving panels. https://github.com/grafana/grafana/issues/18497
+     theme.breakpoints.md = 769
   */
-  const draggable = width <= 420 ? false : isDraggable;
+  const draggable = width <= 769 ? false : isDraggable;
 
   return (
     <ReactGridLayout
@@ -101,26 +102,17 @@ export interface Props {
 }
 
 export class DashboardGrid extends PureComponent<Props> {
-  panelMap: { [id: string]: PanelModel };
-  panelRef: { [id: string]: HTMLElement } = {};
+  private panelMap: { [id: string]: PanelModel };
+  private panelRef: { [id: string]: HTMLElement } = {};
+  private eventSubs = new Subscription();
 
   componentDidMount() {
     const { dashboard } = this.props;
-
-    dashboard.on(panelAdded, this.triggerForceUpdate);
-    dashboard.on(panelRemoved, this.triggerForceUpdate);
-    dashboard.on(CoreEvents.repeatsProcessed, this.triggerForceUpdate);
-    dashboard.on(CoreEvents.rowCollapsed, this.triggerForceUpdate);
-    dashboard.on(CoreEvents.rowExpanded, this.triggerForceUpdate);
+    this.eventSubs.add(dashboard.events.subscribe(DashboardPanelsChangedEvent, this.triggerForceUpdate));
   }
 
   componentWillUnmount() {
-    const { dashboard } = this.props;
-    dashboard.off(panelAdded, this.triggerForceUpdate);
-    dashboard.off(panelRemoved, this.triggerForceUpdate);
-    dashboard.off(CoreEvents.repeatsProcessed, this.triggerForceUpdate);
-    dashboard.off(CoreEvents.rowCollapsed, this.triggerForceUpdate);
-    dashboard.off(CoreEvents.rowExpanded, this.triggerForceUpdate);
+    this.eventSubs.unsubscribe();
   }
 
   buildLayout() {

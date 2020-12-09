@@ -201,9 +201,8 @@ func (f *JSONFormatter) processArray(array []interface{}, deltas []diff.Delta) e
 
 	// additional Added
 	for _, delta := range deltas {
-		switch delta.(type) {
-		case *diff.Added:
-			d := delta.(*diff.Added)
+		d, ok := delta.(*diff.Added)
+		if ok {
 			// skip items already processed
 			if int(d.Position.(diff.Index)) < len(array) {
 				continue
@@ -226,9 +225,9 @@ func (f *JSONFormatter) processObject(object map[string]interface{}, deltas []di
 
 	// Added
 	for _, delta := range deltas {
-		switch delta := delta.(type) {
-		case *diff.Added:
-			f.printRecursive(delta.Position.String(), delta.Value, ChangeAdded)
+		d, ok := delta.(*diff.Added)
+		if ok {
+			f.printRecursive(d.Position.String(), d.Value, ChangeAdded)
 		}
 	}
 
@@ -244,9 +243,9 @@ func (f *JSONFormatter) processItem(value interface{}, deltas []diff.Delta, posi
 			case *diff.Object:
 				switch value.(type) {
 				case map[string]interface{}:
-					//ok
+					// ok
 				default:
-					return errors.New("Type mismatch")
+					return errors.New("type mismatch")
 				}
 				o := value.(map[string]interface{})
 
@@ -269,9 +268,9 @@ func (f *JSONFormatter) processItem(value interface{}, deltas []diff.Delta, posi
 			case *diff.Array:
 				switch value.(type) {
 				case []interface{}:
-					//ok
+					// ok
 				default:
-					return errors.New("Type mismatch")
+					return errors.New("type mismatch")
 				}
 				a := value.([]interface{})
 
@@ -311,7 +310,7 @@ func (f *JSONFormatter) processItem(value interface{}, deltas []diff.Delta, posi
 				f.printRecursive(positionStr, matchedDelta.Value, ChangeDeleted)
 
 			default:
-				return errors.New("Unknown Delta type detected")
+				return errors.New("unknown Delta type detected")
 			}
 		}
 	} else {

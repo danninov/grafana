@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/md5"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,7 +17,6 @@ import (
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/logger"
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/models"
 	"github.com/grafana/grafana/pkg/util/errutil"
-	"golang.org/x/xerrors"
 )
 
 type GrafanaComClient struct {
@@ -26,9 +26,8 @@ type GrafanaComClient struct {
 func (client *GrafanaComClient) GetPlugin(pluginId, repoUrl string) (models.Plugin, error) {
 	logger.Debugf("getting plugin metadata from: %v pluginId: %v \n", repoUrl, pluginId)
 	body, err := sendRequestGetBytes(HttpClient, repoUrl, "repo", pluginId)
-
 	if err != nil {
-		if err == ErrNotFoundError {
+		if errors.Is(err, ErrNotFoundError) {
 			return models.Plugin{}, errutil.Wrap("Failed to find requested plugin, check if the plugin_id is correct", err)
 		}
 		return models.Plugin{}, errutil.Wrap("Failed to send request", err)
@@ -45,8 +44,11 @@ func (client *GrafanaComClient) GetPlugin(pluginId, repoUrl string) (models.Plug
 }
 
 func (client *GrafanaComClient) DownloadFile(pluginName string, tmpFile *os.File, url string, checksum string) (err error) {
-	// Try handling url like local file path first
+	// Try handling URL as a local file path first
 	if _, err := os.Stat(url); err == nil {
+		// We can ignore this gosec G304 warning since `url` stems from command line flag "pluginUrl". If the
+		// user shouldn't be able to read the file, it should be handled through filesystem permissions.
+		// nolint:gosec
 		f, err := os.Open(url)
 		if err != nil {
 			return errutil.Wrap("Failed to read plugin archive", err)
@@ -78,7 +80,7 @@ func (client *GrafanaComClient) DownloadFile(pluginName string, tmpFile *os.File
 				client.retryCount = 0
 				failure := fmt.Sprintf("%v", r)
 				if failure == "runtime error: makeslice: len out of range" {
-					err = xerrors.New("Corrupt http response from source. Please try again")
+					err = fmt.Errorf("corrupt HTTP response from source, please try again")
 				} else {
 					panic(r)
 				}
@@ -101,7 +103,7 @@ func (client *GrafanaComClient) DownloadFile(pluginName string, tmpFile *os.File
 	}
 	w.Flush()
 	if len(checksum) > 0 && checksum != fmt.Sprintf("%x", h.Sum(nil)) {
-		return xerrors.New("Expected MD5 checksum does not match the downloaded archive. Please contact security@grafana.com.")
+		return fmt.Errorf("expected MD5 checksum does not match the downloaded archive - please contact security@grafana.com")
 	}
 	return nil
 }
@@ -147,7 +149,11 @@ func sendRequest(client http.Client, repoUrl string, subPaths ...string) (io.Rea
 }
 
 func createRequest(repoUrl string, subPaths ...string) (*http.Request, error) {
-	u, _ := url.Parse(repoUrl)
+	u, err := url.Parse(repoUrl)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, v := range subPaths {
 		u.Path = path.Join(u.Path, v)
 	}
@@ -171,7 +177,7 @@ func handleResponse(res *http.Response) (io.ReadCloser, error) {
 	}
 
 	if res.StatusCode/100 != 2 && res.StatusCode/100 != 4 {
-		return nil, fmt.Errorf("Api returned invalid status: %s", res.Status)
+		return nil, fmt.Errorf("API returned invalid status: %s", res.Status)
 	}
 
 	if res.StatusCode/100 == 4 {

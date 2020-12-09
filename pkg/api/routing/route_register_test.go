@@ -51,9 +51,7 @@ func TestRouteSimpleRegister(t *testing.T) {
 	}
 
 	// Setup
-	rr := NewRouteRegister(func(name string) macaron.Handler {
-		return emptyHandler(name)
-	})
+	rr := NewRouteRegister(emptyHandler)
 
 	rr.Delete("/admin", emptyHandler("1"))
 	rr.Get("/down", emptyHandler("1"), emptyHandler("2"))
@@ -199,10 +197,7 @@ func TestDuplicateRoutShouldPanic(t *testing.T) {
 		}
 	}()
 
-	rr := NewRouteRegister(func(name string) macaron.Handler {
-		return emptyHandler(name)
-	})
-
+	rr := NewRouteRegister(emptyHandler)
 	rr.Get("/api", emptyHandler("1"))
 	rr.Get("/api", emptyHandler("1"))
 
@@ -219,9 +214,12 @@ func TestNamedMiddlewareRouteRegister(t *testing.T) {
 		{method: "GET", pattern: "/user/admin/all", handlers: emptyHandlers(5)},
 	}
 
+	namedMiddlewares := map[string]bool{}
 	// Setup
 	rr := NewRouteRegister(func(name string) macaron.Handler {
-		return emptyHandler(name)
+		namedMiddlewares[name] = true
+
+		return struct{ name string }{name: name}
 	})
 
 	rr.Delete("/admin", emptyHandler("1"))
@@ -252,6 +250,10 @@ func TestNamedMiddlewareRouteRegister(t *testing.T) {
 
 		if testTable[i].pattern != fr.route[i].pattern {
 			t.Errorf("want %s got %v", testTable[i].pattern, fr.route[i].pattern)
+		}
+
+		if _, exist := namedMiddlewares[testTable[i].pattern]; !exist {
+			t.Errorf("could not find named route named %s", testTable[i].pattern)
 		}
 
 		if len(testTable[i].handlers) != len(fr.route[i].handlers) {

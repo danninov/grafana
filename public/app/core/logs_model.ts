@@ -28,11 +28,12 @@ import {
   textUtil,
   dateTime,
   AbsoluteTimeRange,
+  sortInAscendingOrder,
 } from '@grafana/data';
 import { getThemeColor } from 'app/core/utils/colors';
 
-import { sortInAscendingOrder, deduplicateLogRowsById } from 'app/core/utils/explore';
-import { decimalSIPrefix } from '@grafana/data/src/valueFormats/symbolFormatters';
+import { deduplicateLogRowsById } from 'app/core/utils/explore';
+import { SIPrefix } from '@grafana/data/src/valueFormats/symbolFormatters';
 
 export const LogLevelColor = {
   [LogLevel.critical]: colors[7],
@@ -269,7 +270,8 @@ function separateLogsAndMetrics(dataFrames: DataFrame[]) {
   const logSeries: DataFrame[] = [];
 
   for (const dataFrame of dataFrames) {
-    if (isLogsData(dataFrame)) {
+    // We want to show meta stats even if no result was returned. That's why we are pushing also data frames with no fields.
+    if (isLogsData(dataFrame) || !dataFrame.fields.length) {
       logSeries.push(dataFrame);
       continue;
     }
@@ -303,23 +305,33 @@ export function logSeriesToLogsModel(logSeries: DataFrame[]): LogsModel | undefi
   const allLabels: Labels[] = [];
 
   // Find the fields we care about and collect all labels
-  const allSeries: LogFields[] = logSeries.map(series => {
-    const fieldCache = new FieldCache(series);
-    const stringField = fieldCache.getFirstFieldOfType(FieldType.string);
-    if (stringField?.labels) {
-      allLabels.push(stringField.labels);
-    }
-    return {
-      series,
-      timeField: fieldCache.getFirstFieldOfType(FieldType.time),
-      timeNanosecondField: fieldCache.hasFieldWithNameAndType('tsNs', FieldType.time)
-        ? fieldCache.getFieldByName('tsNs')
-        : undefined,
-      stringField,
-      logLevelField: fieldCache.getFieldByName('level'),
-      idField: getIdField(fieldCache),
-    } as LogFields;
-  });
+  let allSeries: LogFields[] = [];
+
+  // We are sometimes passing data frames with no fields because we want to calculate correct meta stats.
+  // Therefore we need to filter out series with no fields. These series are used only for meta stats calculation.
+  const seriesWithFields = logSeries.filter(series => series.fields.length);
+
+  if (seriesWithFields.length) {
+    allSeries = seriesWithFields.map(series => {
+      const fieldCache = new FieldCache(series);
+      const stringField = fieldCache.getFirstFieldOfType(FieldType.string);
+
+      if (stringField?.labels) {
+        allLabels.push(stringField.labels);
+      }
+
+      return {
+        series,
+        timeField: fieldCache.getFirstFieldOfType(FieldType.time),
+        timeNanosecondField: fieldCache.hasFieldWithNameAndType('tsNs', FieldType.time)
+          ? fieldCache.getFieldByName('tsNs')
+          : undefined,
+        stringField,
+        logLevelField: fieldCache.getFieldByName('level'),
+        idField: getIdField(fieldCache),
+      } as LogFields;
+    });
+  }
 
   const commonLabels = allLabels.length > 0 ? findCommonLabels(allLabels) : {};
 
@@ -412,10 +424,21 @@ export function logSeriesToLogsModel(logSeries: DataFrame[]): LogsModel | undefi
   // Hack to print loki stats in Explore. Should be using proper stats display via drawer in Explore (rework in 7.1)
   let totalBytes = 0;
   const queriesVisited: { [refId: string]: boolean } = {};
+  // To add just 1 error message
+  let errorMetaAdded = false;
 
   for (const series of logSeries) {
     const totalBytesKey = series.meta?.custom?.lokiQueryStatKey;
     const { refId } = series; // Stats are per query, keeping track by refId
+
+    if (!errorMetaAdded && series.meta?.custom?.error) {
+      meta.push({
+        label: '',
+        value: series.meta?.custom.error,
+        kind: LogsMetaKind.Error,
+      });
+      errorMetaAdded = true;
+    }
 
     if (refId && !queriesVisited[refId]) {
       if (totalBytesKey && series.meta?.stats) {
@@ -430,7 +453,7 @@ export function logSeriesToLogsModel(logSeries: DataFrame[]): LogsModel | undefi
   }
 
   if (totalBytes > 0) {
-    const { text, suffix } = decimalSIPrefix('B')(totalBytes);
+    const { text, suffix } = SIPrefix('B')(totalBytes);
     meta.push({
       label: 'Total bytes processed',
       value: `${text} ${suffix}`,

@@ -26,7 +26,7 @@ type ReqContext struct {
 func (ctx *ReqContext) Handle(status int, title string, err error) {
 	if err != nil {
 		ctx.Logger.Error(title, "error", err)
-		if setting.Env != setting.PROD {
+		if setting.Env != setting.Prod {
 			ctx.Data["ErrorMsg"] = err
 		}
 	}
@@ -35,13 +35,7 @@ func (ctx *ReqContext) Handle(status int, title string, err error) {
 	ctx.Data["AppSubUrl"] = setting.AppSubUrl
 	ctx.Data["Theme"] = "dark"
 
-	ctx.HTML(status, setting.ERR_TEMPLATE_NAME)
-}
-
-func (ctx *ReqContext) JsonOK(message string) {
-	resp := make(map[string]interface{})
-	resp["message"] = message
-	ctx.JSON(200, resp)
+	ctx.HTML(status, setting.ErrTemplateName)
 }
 
 func (ctx *ReqContext) IsApiRequest() bool {
@@ -53,7 +47,7 @@ func (ctx *ReqContext) JsonApiErr(status int, message string, err error) {
 
 	if err != nil {
 		ctx.Logger.Error(message, "error", err)
-		if setting.Env != setting.PROD {
+		if setting.Env != setting.Prod {
 			resp["error"] = err.Error()
 		}
 	}

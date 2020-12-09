@@ -315,7 +315,7 @@ func (hs *HTTPServer) addMiddlewaresAndStaticRoutes() {
 		hs.mapStatic(m, hs.Cfg.ImagesDir, "", "/public/img/attachments")
 	}
 
-	m.Use(middleware.AddDefaultResponseHeaders())
+	m.Use(middleware.AddDefaultResponseHeaders(hs.Cfg))
 
 	if setting.ServeFromSubPath && setting.AppSubUrl != "" {
 		m.SetURLPrefix(setting.AppSubUrl)
